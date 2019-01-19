@@ -1,97 +1,62 @@
-import requests
-import json
-import sys
+import argparse
+import os
+import signal
+import time
+from datetime import datetime
+from typing import List
+
+from utilities.logger import log
+
 """
 The aim of this program is to check for a new post of one or more threads, and to check the inbox for new PM's.
 If new post or PM's are found then the program will create a push notification using PushBullet to all devices on your
 PushBullet account. Can be run as a CronJob, Windows Task Scheduler, or equivalent. 
 """
 
-HF_API_KEY = "YOURKEY"
-HF_URL = "https://" + HF_API_KEY + ":@hackforums.net/api/v1/{}/{}/"
-PB_URL = 'https://api.pushbullet.com/v2/{}'
-PB_ACCESS_TOKEN = 'YOURPUSHBULLETTOKENHERE'
-THREAD_LIST = {"THREADID","THREADID2"} # You can watch as many threads as necessary
+go = True
 
 
-def api_query(method, id=None):
-    request_url = HF_URL.format(method, id)
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_10_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/39.0.2171.95 Safari/537.36'}
-    return requests.get(request_url,
-                        headers=headers).json()
+def signal_handler(_, _1):
+    print()
+    log('Stopping...')
+    global go
+    go = False
 
 
-def check_threads():
-    json_data = open_json()
-    for id in THREAD_LIST:
-        thread_data = api_query("thread", id)["result"]
-        current_count = thread_data['numreplies']
-        try:
-            old_count = json_data["threads"][id]
-        except Exception:
-            json_data["threads"][id] = current_count
-            continue
-        data = {}
-        if current_count > old_count:
-            data["title"] = "HackForums Alert"
-            data["body"] = "https://hackforums.net/showthread.php?tid=" + id
-            data["type"] = "note"
-            push_bullet("pushes", data)
-            json_data["threads"][id] = current_count
-    write_json(json_data)
-
-
-def check_pms():
-    pms = api_query("inbox")["result"]
-    json_data = open_json()
-    current_id = pms['pms'][0]["pmid"]
-    try:
-        last_id = json_data["inbox"]["pmid"]
-    except Exception:
-        json_data["inbox"] = {"pmid": current_id}
-        write_json(json_data)
-        return
-    json_data["inbox"] = {"pmid": current_id}
-    data = {}
-    if not current_id == last_id:
-        data["title"] = "HackForums Alert"
-        data["body"] = "New Private Message from {}".format(pms["pms"][0]["senderusername"])
-        data["type"] = "note"
-        json_data["inbox"]["pmid"] = current_id
-        write_json(json_data)
-        push_bullet("pushes", data)
-
-def check():
-    json_data = open_json()
-    if len(json_data) == 0:
-        json_data['threads'] = {}
-        json_data['inbox'] = {}
-        write_json(json_data)
-
-def open_json():
-    with open("config.json") as file:
-        try:
-            return json.load(file)
-        except Exception:
-            data = {}
-            write_json(data)
-            return json.load(file)
-
-
-def write_json(data):
-    with open("config.json", 'w') as file:
-        json.dump(data, file, indent=2)
-
-
-def push_bullet(method, options=None):
-    headers = {"Access-Token": PB_ACCESS_TOKEN}
-    requests_url = 'https://api.pushbullet.com/v2/{}'
-    requests_url = requests_url.format(method)
-    return requests.post(requests_url,headers=headers, data=options).json()
+signal.signal(signal.SIGINT, signal_handler)
 
 if __name__ == '__main__':
-    options = sys.argv
-    check()
-    check_pms()
-    check_threads()
+    parser = argparse.ArgumentParser(description="Configure the settings")
+    parser.add_argument('-r', '--requestsPerHour', action='store', type=int,
+                        help="Sets the requests per hour maximum", default=120)
+    parser.add_argument('-k', '--hackforumsKey', action='store', type=str,
+                        help="Pass your Hackforums API key", default=None)
+    parser.add_argument('-p', '--pushbulletKey', action='store', type=str,
+                        help="Pass your Pushbullet API key", default=None)
+    args = parser.parse_args()
+    hf_key = os.getenv("HF_API_KEY")
+    pb_key = os.getenv("PB_API_KEY")
+    requests_per_hour = args.requestsPerHour
+
+    from endpoints.base import BaseEndpoint
+    from endpoints.private_message import PrivateMessageEndpoint
+    from endpoints.thread import ThreadEndpoint
+
+    endpoint_list = [ThreadEndpoint(), PrivateMessageEndpoint()]  # type: List[BaseEndpoint]
+    request_delay_coefficient = (60 / (requests_per_hour / len(endpoint_list))) / len(endpoint_list)
+    wait_time = len(endpoint_list) * request_delay_coefficient
+    log(f"Delay time is {wait_time} minutes")
+    log(f"Current rates are {requests_per_hour} requests per hour")
+    BaseEndpoint.add_api(args.hackforumsKey, args.pushbulletKey)
+    log("Running")
+    last_run = datetime.now()
+    while go:
+        if (datetime.now() - last_run).total_seconds() / 60 >= wait_time:
+            if BaseEndpoint.sleep_until:
+                if datetime.now() < BaseEndpoint.sleep_until:
+                    continue
+            log("Updating forum data.")
+            for e in endpoint_list:
+                e.update()
+            last_run = datetime.now()
+        time.sleep(0.1)
