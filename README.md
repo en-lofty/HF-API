@@ -15,7 +15,7 @@
                         
 ## Features
 - Alerts when a new reply is detected on a thread 
-- Tracks when a new private message was received
+- Tracks when a new private message is received
 
 ## ToDo
 ### Thread tracking

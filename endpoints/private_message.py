@@ -23,8 +23,8 @@ class PrivateMessageEndpoint(BaseEndpoint):
             return
         self.json["inbox"] = {"pmid": current_id}
         if not current_id == last_id:
-            super().pb.push_note("HackForums Alert",
-                                 "New Private Message from {}".format(pms["pms"][0]["senderusername"]))
+            super().pb.push_note("New Private Message from {}".format(pms["pms"][0]["senderusername"]),
+                                 "-")
             log(f"New Private message from {pms['pms'][0]['senderusername']}")
-            self.json["inbox"].update("pmid", current_id)
+            self.json["inbox"].update({"pmid": current_id})
             super().save_data()

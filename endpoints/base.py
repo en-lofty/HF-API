@@ -39,12 +39,7 @@ class BaseEndpoint:
             log("Loaded Hackforums API key from config.json")
         if "pb_key" in load_config:
             _pb_api_key = load_config["pb_key"]
-            try:
-                pb = Pushbullet(_pb_api_key)
-                log("Loaded Pushbullet API key from config.json")
-            except InvalidKeyError as ike:
-                exception(ike)
-                log("The loaded Pushbullet key is invalid.")
+            log("Loaded Pushbullet API key from config.json")
 
         _ready = True
 
@@ -83,8 +78,8 @@ class BaseEndpoint:
 
     @classmethod
     def add_api(cls, hf_api, pb_api=None):
-        cls._hf_api_key = hf_api
         if not cls._hf_api_key == hf_api:
+            cls._hf_api_key = hf_api
             if cls.test_api():
                 log("Your Hackforums API key has successfully been validated.")
                 cls._ready = True
@@ -111,14 +106,12 @@ class BaseEndpoint:
     @classmethod
     def test_pushbullet(cls) -> bool:
         log("Testing Pushbullet key...")
-        cls.pb = Pushbullet(cls._pb_api_key)
         try:
-            result = cls.pb.push_note("Validation test", "Test")
-            return "active" in result
-
+            cls.pb = Pushbullet(cls._pb_api_key)
+            return True
         except Exception as e:
             exception(e)
-            raise Exception("Unable to validate Pushbullet API key.")
+            raise Exception("Pushbullet API key validation failed.")
 
     @classmethod
     def notify(cls):

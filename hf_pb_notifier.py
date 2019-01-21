@@ -47,7 +47,14 @@ if __name__ == '__main__':
     wait_time = len(endpoint_list) * request_delay_coefficient
     log(f"Delay time is {wait_time} minutes")
     log(f"Current rates are {requests_per_hour} requests per hour")
-    BaseEndpoint.add_api(args.hackforumsKey, args.pushbulletKey)
+    if args.hackforumsKey:
+        BaseEndpoint.add_api(args.hackforumsKey, args.pushbulletKey)
+    else:
+        # else assume that the key was loaded from config file
+        if not BaseEndpoint.test_api():
+            raise Exception("Need a valid API key.")
+        if not BaseEndpoint.test_pushbullet():
+            raise Exception("Need a valid Pushbullet key.")
     log("Running")
     last_run = datetime.now()
     while go:
@@ -55,7 +62,7 @@ if __name__ == '__main__':
             if BaseEndpoint.sleep_until:
                 if datetime.now() < BaseEndpoint.sleep_until:
                     continue
-            log("Updating forum data.")
+            log("Updating data.")
             for e in endpoint_list:
                 e.update()
             last_run = datetime.now()
