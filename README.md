@@ -23,3 +23,4 @@
 - Send the username of the user replying
 ### Other
 - Wrap the json responses in a class for easy parsing.
+- Add forum watching
